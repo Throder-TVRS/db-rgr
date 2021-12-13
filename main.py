@@ -323,7 +323,7 @@ def main():
                         special_queries(conn, cursor)
 
                     elif option == '3':
-                        print_tables(conn, cursor)
+                        print_tables()
                     else:
                         break
     except Exception as e:
