@@ -29,7 +29,8 @@ SPECIAL_QUERIES = [('Полная очистка таблицы', 'table_truncat
                    ('Получить список клиентов фирмы', 'client_by_firm'),
                    ('Получить список фирм, клиентом которых является человек', 'firm_by_client'),
                    ('По клиенту и дате заказа узнать у какой фирмы он был сделан', 'firm_by_client_and_date'),
-                   ('Получить список дат, в которые клиент делал у фирмы заказы', 'date_by_firm_and_client')]
+                   ('Получить список дат, в которые клиент делал у фирмы заказы', 'date_by_firm_and_client'),
+                   ('Сбросить все таблицы', 'drop_tables')]
 
 
 def is_correct(option, lower_bound, upper_bound):
@@ -193,6 +194,61 @@ def date_and_client_by_firm():
            [firm_name, 5]
 
 
+def create_tables(conn, cursor):
+    """Создание стандартных необходимых таблиц, если их нет"""
+    cursor.execute("""
+create table if not exists firm (
+    name varchar(255) primary key,
+    address varchar(255),
+    owner varchar(255)
+);
+create table if not exists client (
+    name varchar(255) primary key,
+    phone_number varchar(255),
+    age integer,
+    sex varchar(255)
+);
+create table if not exists service (
+    name varchar(255),
+    description varchar(255),
+    rate float,
+    firm_name varchar(255),
+    primary key (name, firm_name),
+    foreign key (firm_name) references firm (name) on delete cascade on update cascade
+);
+create table if not exists order_t (
+    order_date timestamp,
+    cost float,
+    details varchar(255),
+    client_name varchar(255),
+    primary key (order_date, client_name),
+    foreign key (client_name) references client (name) on delete cascade on update cascade
+);
+create table if not exists client_firm (
+    firm_name varchar(255),
+    client_name varchar(255),
+    primary key (firm_name, client_name),
+    foreign key (firm_name) references firm (name) on delete cascade on update cascade,
+    foreign key (client_name) references client (name) on delete cascade on update cascade
+);
+create table if not exists order_date_firm (
+    firm_name varchar(255),
+    order_date timestamp,
+    client_name varchar(255),
+    primary key (firm_name, order_date, client_name),
+    foreign key (firm_name) references firm (name) on delete cascade on update cascade,
+    foreign key (order_date, client_name) references order_t (order_date, client_name) on delete cascade on update cascade
+);""")
+    conn.commit()
+
+
+def drop_tables(conn, cursor):
+    for table in TABLES:
+        cursor.execute(f"""drop table if exists {table[2]} cascade;""")
+        conn.commit()
+    create_tables(conn, cursor)
+
+
 def special_queries(conn, cursor):
     """Меню выбора особых запросов"""
     while True:
@@ -208,6 +264,9 @@ def special_queries(conn, cursor):
         else:
             option = int(option) - 1
             try:
+                if option == 7:
+                    drop_tables(conn, cursor)
+                    continue
                 query, params = eval(f'{SPECIAL_QUERIES[option][1]}()')
                 if option > 0:
                     table = params.pop(-1)
@@ -243,6 +302,7 @@ def main():
     try:
         with closing(psycopg2.connect(dbname=sys.argv[1], user=sys.argv[2], password=sys.argv[3], host=sys.argv[4])) as conn:
             with conn.cursor() as cursor:
+                create_tables(conn, cursor)
                 while True:
                     print()
                     print('Доступные опции:')
@@ -263,7 +323,7 @@ def main():
                         special_queries(conn, cursor)
 
                     elif option == '3':
-                        print_tables()
+                        print_tables(conn, cursor)
                     else:
                         break
     except Exception as e:
